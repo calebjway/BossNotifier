@@ -18,7 +18,7 @@ using HarmonyLib;
 #pragma warning disable IDE0051 // Remove unused private members
 
 namespace BossNotifier {
-    [BepInPlugin("Mattdokn.BossNotifier", "BossNotifier", "1.5.4")]
+    [BepInPlugin("Mattdokn.BossNotifier", "BossNotifier", "2.0.0")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.SoftDependency)]
     public class BossNotifierPlugin : BaseUnityPlugin {
         public static FieldInfo FikaIsPlayerHost;
@@ -47,18 +47,24 @@ namespace BossNotifier {
             { WildSpawnType.bossKnight, "Goons" },
             { WildSpawnType.sectantPriest, "Cultists" },
             { WildSpawnType.bossTagilla, "Tagilla" },
+            { WildSpawnType.bossTagillaAgro, "Tagilla" },
             { WildSpawnType.bossKilla, "Killa" },
+            { WildSpawnType.bossKillaAgro, "Killa" },
             { WildSpawnType.bossZryachiy, "Zryachiy" },
             { WildSpawnType.bossGluhar, "Glukhar" },
             { WildSpawnType.bossSanitar, "Sanitar" },
             { WildSpawnType.bossKojaniy, "Shturman" },
             { WildSpawnType.bossBoar, "Kaban" },
+            { WildSpawnType.bossBoarSniper, "Kaban Sniper" },
             { WildSpawnType.gifter, "Santa Claus" },
             { WildSpawnType.arenaFighterEvent, "Blood Hounds" },
             { WildSpawnType.crazyAssaultEvent, "Crazy Scavs" },
             { WildSpawnType.exUsec, "Rogues" },
             { WildSpawnType.bossKolontay, "Kollontay" },
             { WildSpawnType.bossPartisan, "Partisan" },
+            { WildSpawnType.sectantPredvestnik, "Cultist Predvestnik" },
+            { WildSpawnType.sectantPrizrak, "Cultist Prizrak" },
+            { WildSpawnType.sectantOni, "Cultist Oni" },
             { (WildSpawnType)4206927, "Punisher" },
             { (WildSpawnType)199, "Legion" },
         };
@@ -369,7 +375,7 @@ namespace BossNotifier {
 
             foreach (var bossSpawn in BossLocationSpawnPatch.bossesInRaid) {
                 // If it's daytime then cultists don't spawn
-                if (isDayTime && bossSpawn.Key.Equals("Cultists")) continue;
+                if (isDayTime && (bossSpawn.Key.Equals("Cultists") || bossSpawn.Key.Contains("Cultist"))) continue;
 
                 // If boss has been spawned/detected
                 bool isDetected = BotBossPatch.spawnedBosses.Contains(bossSpawn.Key);
