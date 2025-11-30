@@ -18,27 +18,22 @@ using HarmonyLib;
 #pragma warning disable IDE0051 // Remove unused private members
 
 namespace BossNotifier {
-    [BepInPlugin("Mattdokn.BossNotifier", "BossNotifier", "2.0.0")]
-    [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInPlugin("Mattdokn.BossNotifier", "BossNotifier", "2.0.1")]
     public class BossNotifierPlugin : BaseUnityPlugin {
-        public static FieldInfo FikaIsPlayerHost;
 
 
         // Configuration entries
-        public static ConfigEntry<KeyboardShortcut> showBossesKeyCode;
-        public static ConfigEntry<bool> showNotificationsOnRaidStart;
-        public static ConfigEntry<int> intelCenterUnlockLevel;
-        // public static ConfigEntry<bool> showBossLocation;
-        public static ConfigEntry<int> intelCenterLocationUnlockLevel;
-        // public static ConfigEntry<bool> showBossDetected;
-        public static ConfigEntry<int> intelCenterDetectedUnlockLevel;
+        public static ConfigEntry<KeyboardShortcut> ShowBossesKeyCode;
+        public static ConfigEntry<bool> ShowNotificationsOnRaidStart;
+        public static ConfigEntry<int> IntelCenterUnlockLevel;
+        public static ConfigEntry<int> IntelCenterLocationUnlockLevel;
+        public static ConfigEntry<int> IntelCenterDetectedUnlockLevel;
 
-        private static ManualLogSource logger;
-
+        internal static ManualLogSource LogSource;
 
         // Logging methods
         public static void Log(LogLevel level, string msg) {
-            logger.Log(level, msg);
+            LogSource?.Log(level, msg);
         }
 
         // Dictionary mapping boss types to names
@@ -114,29 +109,20 @@ namespace BossNotifier {
         };
 
         private void Awake() {
-            logger = Logger;
+            LogSource = Logger;
 
-            Type FikaUtilExternalType = Type.GetType("Fika.Core.Coop.Utils.FikaBackendUtils, Fika.Core", false);
-            if (FikaUtilExternalType != null) {
-                FikaIsPlayerHost = AccessTools.Field(FikaUtilExternalType, "MatchingType");
-            }
 
             // Initialize configuration entries
-            showBossesKeyCode = Config.Bind("General", "Keyboard Shortcut", new KeyboardShortcut(KeyCode.O), "Key to show boss notifications.");
-            showNotificationsOnRaidStart = Config.Bind("General", "Show Bosses on Raid Start", true, "Show boss notifications on raid start.");
-            // showBossLocation = Config.Bind("Balance", "Show Boss Spawn Location", true, "Show boss locations in notification.");
-            // showBossDetected = Config.Bind("In-Raid Updates", "Show Boss Detected Notification", true, "Show detected notification when bosses spawn during the raid.");
-            // intelCenterUnlockLevel = Config.Bind("Balance", "Intel Center Level Requirement", 0, "Level to unlock at.");
-            intelCenterUnlockLevel = Config.Bind("Intel Center Unlocks (4 means Disabled)", "1. Intel Center Level Requirement", 0, 
+            ShowBossesKeyCode = Config.Bind("General", "Keyboard Shortcut", new KeyboardShortcut(KeyCode.O), "Key to show boss notifications.");
+            ShowNotificationsOnRaidStart = Config.Bind("General", "Show Bosses on Raid Start", true, "Show boss notifications on raid start.");
+            IntelCenterUnlockLevel = Config.Bind("Intel Center Unlocks (4 means Disabled)", "1. Intel Center Level Requirement", 0,
                 new ConfigDescription("Level to unlock plain notifications at.",
                 new AcceptableValueRange<int>(0, 4)));
-            // intelCenterLocationUnlockLevel = Config.Bind("Balance", "Intel Center Location Level Requirement", 0, "Unlocks showing boss spawn location.");
-            intelCenterLocationUnlockLevel = Config.Bind("Intel Center Unlocks (4 means Disabled)", "2. Intel Center Location Level Requirement", 0,
+            IntelCenterLocationUnlockLevel = Config.Bind("Intel Center Unlocks (4 means Disabled)", "2. Intel Center Location Level Requirement", 0,
                 new ConfigDescription("Unlocks showing boss spawn location in notification.",
                 new AcceptableValueRange<int>(0, 4)));
-            // intelCenterDetectedUnlockLevel = Config.Bind("Intel Center Unlocks", "Intel Center Detection Requirement", 0, "Unlocks showing boss detected notification.");
-            intelCenterDetectedUnlockLevel = Config.Bind("Intel Center Unlocks (4 means Disabled)", "3. Intel Center Detection Requirement", 0, 
-                new ConfigDescription("Unlocks showing boss detected notification. (When you get near a boss)", 
+            IntelCenterDetectedUnlockLevel = Config.Bind("Intel Center Unlocks (4 means Disabled)", "3. Intel Center Detection Requirement", 0,
+                new ConfigDescription("Unlocks showing boss detected notification. (When you get near a boss)",
                 new AcceptableValueRange<int>(0, 4)));
 
 
@@ -194,7 +180,7 @@ namespace BossNotifier {
         // Add boss spawn if not already present
         private static void TryAddBoss(string boss, string location) {
             if (location == null) {
-                Logger.LogError("Tried to add boss with null location.");
+                BossNotifierPlugin.Log(LogLevel.Error, "Tried to add boss with null location.");
                 return;
             }
             // If boss is already added
@@ -218,27 +204,33 @@ namespace BossNotifier {
         // Handle boss location spawns
         [PatchPostfix]
         private static void PatchPostfix(BossLocationSpawn __instance) {
-            // If the boss will spawn
-            if (__instance.ShallSpawn) {
-                // Get it's name, if no name found then return.
-                string name = BossNotifierPlugin.GetBossName(__instance.BossType);
-                if (name == null) return;
+            try {
+                // If the boss will spawn
+                if (__instance.ShallSpawn) {
+                    // Get it's name, if no name found then return.
+                    string name = BossNotifierPlugin.GetBossName(__instance.BossType);
+                    if (name == null) return;
 
-                // Get the spawn location
-                string location = BossNotifierPlugin.GetZoneName(__instance.BornZone);
+                    // Get the spawn location
+                    string location = BossNotifierPlugin.GetZoneName(__instance.BornZone);
 
-                BossNotifierPlugin.Log(LogLevel.Info, $"Boss {name} @ zone {__instance.BornZone} translated to {(location == null ? __instance.BornZone.Replace("Bot", "").Replace("Zone", ""): location)}");
+                    BossNotifierPlugin.Log(LogLevel.Info, $"Boss {name} @ zone {__instance.BornZone} translated to {(location == null ? __instance.BornZone.Replace("Bot", "").Replace("Zone", ""): location)}");
 
-                if (location == null) {
-                    // If it's null then use cleaned up BornZone
-                    TryAddBoss(name, __instance.BornZone.Replace("Bot", "").Replace("Zone", ""));
-                } else if (location.Equals("")) {
-                    // If it's empty location (Factory Spawn)
-                    TryAddBoss(name, "");
-                } else {
-                    // Location is valid
-                    TryAddBoss(name, location);
+                    if (location == null) {
+                        // If it's null then use cleaned up BornZone
+                        TryAddBoss(name, __instance.BornZone.Replace("Bot", "").Replace("Zone", ""));
+                    } else if (location.Equals("")) {
+                        // If it's empty location (Factory Spawn)
+                        TryAddBoss(name, "");
+                    } else {
+                        // Location is valid
+                        TryAddBoss(name, location);
+                    }
                 }
+            }
+            catch (Exception ex) {
+                BossNotifierPlugin.Log(LogLevel.Error, $"Error in BossLocationSpawnPatch: {ex.Message}");
+                BossNotifierPlugin.Log(LogLevel.Error, $"Stack trace: {ex.StackTrace}");
             }
         }
     }
@@ -255,26 +247,27 @@ namespace BossNotifier {
 
         [PatchPostfix]
         private static void PatchPostfix(BotBoss __instance) {
-            WildSpawnType role = __instance.Owner.Profile.Info.Settings.Role;
-            // Get it's name, if no name found then return.
-            string name = BossNotifierPlugin.GetBossName(role);
-            if (name == null) return;
+            try {
+                WildSpawnType role = __instance.Owner.Profile.Info.Settings.Role;
+                // Get it's name, if no name found then return.
+                string name = BossNotifierPlugin.GetBossName(role);
+                if (name == null) return;
 
-            // Get the spawn location
-            Vector3 positionVector = __instance.Player().Position;
-            string position = $"{(int)positionVector.x}, {(int)positionVector.y}, {(int)positionVector.z}";
-            // {name} has spawned at (x, y, z) on {map}
-            BossNotifierPlugin.Log(LogLevel.Info, $"{name} has spawned at {position} on {Singleton<GameWorld>.Instance.LocationId}");
+                // Get the spawn location
+                Vector3 positionVector = __instance.Player().Position;
+                string position = $"{(int)positionVector.x}, {(int)positionVector.y}, {(int)positionVector.z}";
+                // {name} has spawned at (x, y, z) on {map}
+                BossNotifierPlugin.Log(LogLevel.Info, $"{name} has spawned at {position} on {Singleton<GameWorld>.Instance.LocationId}");
 
-            // Add boss to spawnedBosses
-            spawnedBosses.Add(name);
+                // Add boss to spawnedBosses
+                spawnedBosses.Add(name);
 
-            vicinityNotifications.Enqueue($"{name} {(BossNotifierPlugin.pluralBosses.Contains(name) ? "have" : "has")} been detected in your vicinity.");
-
-            //if (BossNotifierMono.Instance.intelCenterLevel >= BossNotifierPlugin.intelCenterDetectedUnlockLevel.Value) {
-            //    NotificationManagerClass.DisplayMessageNotification($"{name} {(BossNotifierPlugin.pluralBosses.Contains(name) ? "have" : "has")} been detected in your vicinity.", ENotificationDurationType.Long);
-            //    BossNotifierMono.Instance.GenerateBossNotifications();
-            //}
+                vicinityNotifications.Enqueue($"{name} {(BossNotifierPlugin.pluralBosses.Contains(name) ? "have" : "has")} been detected in your vicinity.");
+            }
+            catch (Exception ex) {
+                BossNotifierPlugin.Log(LogLevel.Error, $"Error in BotBossPatch: {ex.Message}");
+                BossNotifierPlugin.Log(LogLevel.Error, $"Stack trace: {ex.StackTrace}");
+            }
         }
     }
 
@@ -284,8 +277,14 @@ namespace BossNotifier {
 
         [PatchPrefix]
         public static void PatchPrefix() {
-            // Start BossNotifierMono
-            BossNotifierMono.Init();
+            try {
+                // Start BossNotifierMono
+                BossNotifierMono.Init();
+            }
+            catch (Exception ex) {
+                BossNotifierPlugin.Log(LogLevel.Error, $"Error in NewGamePatch: {ex.Message}");
+                BossNotifierPlugin.Log(LogLevel.Error, $"Stack trace: {ex.StackTrace}");
+            }
         }
     }
 
@@ -299,8 +298,7 @@ namespace BossNotifier {
         public int intelCenterLevel;
 
         private void SendBossNotifications() {
-            if (!ShouldFunction()) return;
-            if (intelCenterLevel < BossNotifierPlugin.intelCenterUnlockLevel.Value) return;
+            if (intelCenterLevel < BossNotifierPlugin.IntelCenterUnlockLevel.Value) return;
 
             // If we have no notifications to display, send one saying there's no bosses located.
             if (bossNotificationMessages.Count == 0) {
@@ -315,34 +313,45 @@ namespace BossNotifier {
 
         // Initializes boss notifier mono and attaches it to the game world object
         public static void Init() {
-            if (Singleton<GameWorld>.Instantiated) {
-                Instance = Singleton<GameWorld>.Instance.GetOrAddComponent<BossNotifierMono>();
-                BossNotifierPlugin.Log(LogLevel.Info, $"Game started on map {Singleton<GameWorld>.Instance.LocationId}");
-                if (ClientAppUtils.GetMainApp().GetClientBackEndSession() == null) {
-                    Instance.intelCenterLevel = 0;
-                } else {
-                    Instance.intelCenterLevel = ClientAppUtils.GetMainApp().GetClientBackEndSession().Profile.Hideout.Areas[11].Level;
-                }
+            if (!Singleton<GameWorld>.Instantiated) {
+                BossNotifierPlugin.Log(LogLevel.Warning, "GameWorld not instantiated, cannot initialize BossNotifierMono");
+                return;
+            }
+
+            var gameWorld = Singleton<GameWorld>.Instance;
+            if (gameWorld == null) {
+                BossNotifierPlugin.Log(LogLevel.Error, "GameWorld instance is null");
+                return;
+            }
+
+            Instance = gameWorld.GetOrAddComponent<BossNotifierMono>();
+            BossNotifierPlugin.Log(LogLevel.Info, $"Game started on map {gameWorld.LocationId}");
+
+            var mainApp = ClientAppUtils.GetMainApp();
+            if (mainApp?.GetClientBackEndSession() == null) {
+                Instance.intelCenterLevel = 0;
+            } else {
+                Instance.intelCenterLevel = mainApp.GetClientBackEndSession().Profile.Hideout.Areas[11].Level;
             }
         }
 
         public void Start() {
             GenerateBossNotifications();
 
-            if (!BossNotifierPlugin.showNotificationsOnRaidStart.Value) return;
+            if (!BossNotifierPlugin.ShowNotificationsOnRaidStart.Value) return;
             Invoke("SendBossNotifications", 2f);
         }
 
         public void Update() {
             if (BotBossPatch.vicinityNotifications.Count > 0) {
                 string notif = BotBossPatch.vicinityNotifications.Dequeue();
-                if (Instance.intelCenterLevel >= BossNotifierPlugin.intelCenterDetectedUnlockLevel.Value) {
+                if (Instance.intelCenterLevel >= BossNotifierPlugin.IntelCenterDetectedUnlockLevel.Value) {
                     NotificationManagerClass.DisplayMessageNotification(notif, ENotificationDurationType.Long);
                     Instance.GenerateBossNotifications();
                 }
             }
 
-            if (IsKeyPressed(BossNotifierPlugin.showBossesKeyCode.Value)) {
+            if (IsKeyPressed(BossNotifierPlugin.ShowBossesKeyCode.Value)) {
                 SendBossNotifications();
             }
         }
@@ -354,10 +363,6 @@ namespace BossNotifier {
             BotBossPatch.spawnedBosses.Clear();
         }
 
-        public bool ShouldFunction() {
-            if (BossNotifierPlugin.FikaIsPlayerHost == null) return true;
-            return (int)BossNotifierPlugin.FikaIsPlayerHost.GetValue(null) == 2;
-        }
 
         public void GenerateBossNotifications() {
             // Clear out boss notification cache
@@ -365,13 +370,19 @@ namespace BossNotifier {
 
             // Check if it's daytime to prevent showing Cultist notif.
             // This is the same method that DayTimeCultists patches so if that mod is installed then this always returns false
-            bool isDayTime = Singleton<IBotGame>.Instance.BotsController.ZonesLeaveController.IsDay();
+            var botGame = Singleton<IBotGame>.Instance;
+            if (botGame == null || botGame.BotsController == null) {
+                BossNotifierPlugin.Log(LogLevel.Warning, "BotGame or BotsController is null, cannot determine day/night");
+                return;
+            }
+
+            bool isDayTime = botGame.BotsController.ZonesLeaveController.IsDay();
 
             // Get whether location is unlocked or not.
-            bool isLocationUnlocked = intelCenterLevel >= BossNotifierPlugin.intelCenterLocationUnlockLevel.Value;
+            bool isLocationUnlocked = intelCenterLevel >= BossNotifierPlugin.IntelCenterLocationUnlockLevel.Value;
 
             // Get whether detection is unlocked or not.
-            bool isDetectionUnlocked = intelCenterLevel >= BossNotifierPlugin.intelCenterDetectedUnlockLevel.Value;
+            bool isDetectionUnlocked = intelCenterLevel >= BossNotifierPlugin.IntelCenterDetectedUnlockLevel.Value;
 
             foreach (var bossSpawn in BossLocationSpawnPatch.bossesInRaid) {
                 // If it's daytime then cultists don't spawn
